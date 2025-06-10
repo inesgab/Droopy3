@@ -5,3 +5,4 @@ IPython
 pandas
 scipy
 seaborn
+natsort
