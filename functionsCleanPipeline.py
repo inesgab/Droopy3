@@ -193,8 +193,12 @@ def getValueInLabel(label, path):
         c = label.split("g")
         b = c[1].split("-")
         val = float(b[0])
+    if "GFP2" == p[posOfFolderInSource]:
+        c = label.split("_")
+        b = float(c[-2]), c[-1]
+        val = b
 
-    else:
+    else:   
         val = float(b)
 
     return val
@@ -1597,7 +1601,7 @@ def getThresHalfTime(rootPath, source, label):
         thresh = 3
 
     else:
-        thresh = 4.5
+        thresh = 3
 
     return thresh
 
