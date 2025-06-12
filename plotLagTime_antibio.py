@@ -5,7 +5,7 @@ Created on Thu Jun 5 2025
 This script is used to plot the lag time as a function of the inoculum size.
 """
 
-# In[]:
+# ----------Imports----------
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -27,22 +27,18 @@ from functionsCleanPipeline import (
     poolDataInterpolate,
     checkDataInterpolated,
     getThresHalfTime,
-    calcLag,
+    calcLag
 )
 
-# In[]:
-
 # ---------------- Entries ------------------
-rootPathList = ["/Users/inesgabert/Documents/LBE/experiences/RFP_inoculum/"]
+rootPathList = ["/Users/inesgabert/Documents/LBE/experiences/GFP2/"]
 source = "/Users/inesgabert/Documents/LBE/experiences/"
-channelList = ["RFP"]
-channel = "RFP"
+channelList = ["GFP"]
+channel = "GFP"
 paramList = ["lag"]  # ['gRate', 'lag', 'yld']
-antibio = False
+antibio = True
 # --------------- End of entries ------------
 plt.close("all")
-slope = []
-inc = []
 
 # get the halftime of the logistic growth to measure the lag
 for rootPath in rootPathList:
@@ -92,7 +88,6 @@ for rootPath in rootPathList:
                     path + "resultIndiv/" + label + "halftime" + channel + ".csv"
                 )
 
-# In[]:
 
 # plot halftime as a function of N0 to extract lag time t_lag = t_theta - (ln theta  – ln N_0)/Lambda
 dropVolume = 4e-4  # ml
@@ -162,7 +157,9 @@ for rootPath in rootPathList:
             )
             if antibio:
                 positions = []
-                width = width = fig.get_figwidth() / (len(inoculumList) * len(antibioList))
+                width = width = fig.get_figwidth() / (
+                    len(inoculumList) * len(antibioList)
+                )
                 for i, inoc in enumerate(inoculumList):
                     for j, ab in enumerate(antibioList):
                         positions.append(
@@ -209,7 +206,12 @@ for rootPath in rootPathList:
             Patch(facecolor=colors[i], label=f"{antibioList[i]}")
             for i in range(len(antibioList))
         ]
-        plt.legend(handles=legend_handles, loc="best", title = "antibioC (µg/mL)", fontsize="small")
+        plt.legend(
+            handles=legend_handles,
+            loc="best",
+            title="antibioC (µg/mL)",
+            fontsize="small",
+        )
     plt.ylabel("lag (h)")
     yMin = -9
     yMax = 9
@@ -231,7 +233,7 @@ for rootPath in rootPathList:
         bbox_inches="tight",
     )
     plt.close()
-# In[]:
+
 # plot le boxplot du lag, gRate, yield en allant chercher les bons label directement et en les ordonnant
 # sauve le plot qui montre tout les replicat dans rootpath
 # remove the outlayers
@@ -360,9 +362,6 @@ for rootPath in rootPathList:
                 dfData[getValueInLabel(label, path)] = pd.Series(cleanedData)
 
             dfData["date"] = pd.Series(dfData.shape[0] * [date])
-            print("dfData", dfData)
-            print("dfData shape:", dfData.shape)
-            print("dfData columns:", dfData.columns)
             if antibio:
                 tuple_cols = [col for col in dfData.columns if isinstance(col, tuple)]
                 str_cols = [col for col in dfData.columns if isinstance(col, str)]
@@ -371,12 +370,11 @@ for rootPath in rootPathList:
                 sorted_cols = natsorted(tuple_cols) + str_cols
                 dfData = dfData.reindex(sorted_cols, axis=1)
                 antibio_c_list = sorted(antibioList)
-                
-                
+
             else:
                 dfData = dfData.reindex(natsorted(dfData.columns), axis=1)
 
-            print("dfData", dfData)
+
             dfData.columns = [
                 str(col) if isinstance(col, tuple) else col for col in dfData.columns
             ]
@@ -394,11 +392,7 @@ for rootPath in rootPathList:
         fig, ax = plt.subplots()
         if not antibio:
             sns.boxplot(
-                x="variable",
-                y="value",
-                hue="date",
-                data=dfPlot,
-                showfliers=False
+                x="variable", y="value", hue="date", data=dfPlot, showfliers=False
             )
             ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
         else:
@@ -410,9 +404,15 @@ for rootPath in rootPathList:
                 )
                 for j, ab in enumerate(antibio_c_list):
                     # Position dans le dégradé selon la concentration
-                    color = cmap(j / (len(antibio_c_list) - 1)) if len(antibio_c_list) > 1 else base_color
+                    color = (
+                        cmap(j / (len(antibio_c_list) - 1))
+                        if len(antibio_c_list) > 1
+                        else base_color
+                    )
                     palette[f"{date}_{ab}"] = color
-            dfPlot["date_antibio"] = dfPlot["date"].astype(str) + "_" + dfPlot["antibio_c"].astype(str)
+            dfPlot["date_antibio"] = (
+                dfPlot["date"].astype(str) + "_" + dfPlot["antibio_c"].astype(str)
+            )
             sns.boxplot(
                 x="variable",
                 y="value",
@@ -421,7 +421,10 @@ for rootPath in rootPathList:
                 palette=palette,
                 showfliers=False,
             )
-            xtick_labels = [str(v).split(",")[0].replace("(", "").replace("'", "") for v in dfPlot["variable"].unique()]
+            xtick_labels = [
+                str(v).split(",")[0].replace("(", "").replace("'", "")
+                for v in dfPlot["variable"].unique()
+            ]
             unique_inoc = []
             final_labels = []
             for label in xtick_labels:
@@ -440,10 +443,15 @@ for rootPath in rootPathList:
                 for ab in antibio_c_list:
                     key = f"{date}_{ab}"
                     color = palette[key]
-                    date2 = date.split("_")[0] # Extract date part
+                    date2 = date.split("_")[0]  # Extract date part
                     label = f"{date2}_{ab}"
                     legend_handles.append(Patch(facecolor=color, label=label))
-            ax.legend(handles=legend_handles, loc="best", fontsize="small", title="date_antibioC (µg/mL)")
+            ax.legend(
+                handles=legend_handles,
+                loc="best",
+                fontsize="small",
+                title="date_antibioC (µg/mL)",
+            )
 
         ax.set_xlabel(xLabel)
         ax.set_ylim([yMin, yMax])
@@ -451,15 +459,14 @@ for rootPath in rootPathList:
         ax.set_yticks(gridYTicksMajor)
         ax.set_yticks(gridYTicksMinor, minor=True)
         ax.grid(which="both")
-        
 
         fig.savefig(
             rootPath + "_boxplot_" + dataType + "_" + channel + ".pdf",
             bbox_inches="tight",
             format="pdf",
         )
-        
-## error bar plot
+
+        ## error bar plot
         dfPlot2 = pd.DataFrame()
         dfDataMean = pd.DataFrame()
         dfDataStd = pd.DataFrame()
@@ -469,7 +476,6 @@ for rootPath in rootPathList:
         dfPlot2 = dfDataMean.melt(
             id_vars="date", value_vars=dfDataMean.columns, value_name="mean"
         )
-        
 
         dfDataStd = dfDataAllDate.groupby("date").std()
         dfDataStd["date"] = dfDataStd.index
@@ -494,10 +500,14 @@ for rootPath in rootPathList:
         else:
             # Ajoute la colonne antibio_c et inoculum à dfPlot2
             dfPlot2["antibio_c"] = dfPlot2["variable"].apply(
-                lambda x: str(x).split(", ")[1].replace(")", "").replace("'", "") if "," in str(x) else None
+                lambda x: str(x).split(", ")[1].replace(")", "").replace("'", "")
+                if "," in str(x)
+                else None
             )
             dfPlot2["inoculum"] = dfPlot2["variable"].apply(
-                lambda x: float(str(x).split(",")[0].replace("(", "").replace("'", "")) if "," in str(x) else np.nan
+                lambda x: float(str(x).split(",")[0].replace("(", "").replace("'", ""))
+                if "," in str(x)
+                else np.nan
             )
             log_inoc = np.log(dfPlot2["inoculum"].unique())
             inoculumList = sorted(inoculumList)
@@ -506,6 +516,7 @@ for rootPath in rootPathList:
             ab_idx_map = {ab: j for j, ab in enumerate(antibio_c_list)}
             # Pour la légende
             from matplotlib.patches import Patch
+
             # Plot groupé
             for i, inoc in enumerate(inoculumList):
                 for ab in antibio_c_list:
@@ -519,7 +530,10 @@ for rootPath in rootPathList:
                             key = f"{date}_{ab}"
                             color = palette[key]
                             # Position groupée
-                            pos = np.log(inoc) + (ab_idx_map[ab] - len(antibio_c_list) / 2) * width
+                            pos = (
+                                np.log(inoc)
+                                + (ab_idx_map[ab] - len(antibio_c_list) / 2) * width
+                            )
                             ax.errorbar(
                                 x=[pos],
                                 y=dfPlot2.loc[mask, "mean"],
@@ -530,9 +544,15 @@ for rootPath in rootPathList:
                             )
             # Xticks groupés
             ax.set_xticks([np.log(inoc) for inoc in inoculumList])
-            ax.set_xticklabels([str(int(inoc)) for inoc in inoculumList], rotation=45, ha="right")
-            ax.legend(handles=legend_handles, loc="best", fontsize="small", title="date_antibioC (µg/mL)")
-
+            ax.set_xticklabels(
+                [str(int(inoc)) for inoc in inoculumList], rotation=45, ha="right"
+            )
+            ax.legend(
+                handles=legend_handles,
+                loc="best",
+                fontsize="small",
+                title="date_antibioC (µg/mL)",
+            )
 
         ax.set_xlabel(xLabel)
         ax.set_ylim([yMin, yMax])
@@ -543,5 +563,3 @@ for rootPath in rootPathList:
             bbox_inches="tight",
             format="pdf",
         )
-
-# %%
