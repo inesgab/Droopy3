@@ -5,6 +5,7 @@ Created on Fri Jun 13 2025
 This script is used to box plot the lag time as a function of the inoculum size.
 """
 
+# In[]
 # ----------Imports----------
 import numpy as np
 import pandas as pd
@@ -27,11 +28,13 @@ from functionsCleanPipeline import (
     poolDataInterpolate,
     checkDataInterpolated,
     getThresHalfTime,
-    calcLag
+    calcLag,
 )
 
 # ---------------- Entries ------------------
-rootPathList = ["/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_nal_1machine_41/"]
+rootPathList = [
+    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_nal_1machine_41/"
+]
 source = "/Users/inesgabert/Documents/LBE/experiences/"
 channelList = ["GFP"]
 channel = "GFP"
@@ -111,7 +114,7 @@ for rootPath in rootPathList:
             inoculumList = []
             antibioList = []
             [dropMap, df, labelList] = loadData(path)
-            [_, gRate, timeToDetection, stdLag, _, _, halfTime] = getDataHistogram(
+            [_, gRate, timeToDetection, stdLag, yld, _, halfTime] = getDataHistogram(
                 labelList, path, channel, True
             )
             labelList = sorted(labelList)
@@ -140,41 +143,81 @@ for rootPath in rootPathList:
             # On veut : x = antibio, y = lag, couleur = inoculum
 
             # 1. Récupère toutes les valeurs d'inoculum et d'antibio
-            inoculumList = sorted(list({getValueInLabel(col, path)[0] for col in lagTable.columns}))
-            antibioList = sorted(list({getValueInLabel(col, path)[1] for col in lagTable.columns}))
-            
+            inoculumList = sorted(
+                list({getValueInLabel(col, path)[0] for col in lagTable.columns})
+            )
+            antibioList = sorted(
+                list({getValueInLabel(col, path)[1] for col in lagTable.columns})
+            )
+
             # 2. Prépare les données au format "long"
-            df_long = pd.DataFrame()
+            dfPlots = pd.DataFrame()
             for col in lagTable.columns:
                 inoc, antibioD = getValueInLabel(col, path)
-                temp = pd.DataFrame({
-                    "lag": lagTable[col].dropna(),
-                    "antibio_d": antibioD,
-                    "inoculum": inoc
-                })
-                df_long = pd.concat([df_long, temp], ignore_index=True)
+                temp = pd.DataFrame(
+                    {
+                        "lag": lagTable[col].dropna(),
+                        "gRate": gRate[col].dropna(),
+                        "yld": yld[col].dropna(),
+                        "antibio_d": antibioD,
+                        "inoculum": inoc,
+                        "dropId": lagTable[col]
+                        .dropna()
+                        .index,  # index of the data in this col
+                    }
+                )
+                dfPlots = pd.concat([dfPlots, temp], ignore_index=True)
 
             c_init = 1000  # µg/mL
-            df_long["antibio_c"] = c_init / df_long["antibio_d"]
+            dfPlots["antibio_c"] = c_init / dfPlots["antibio_d"]
 
-            df_long["antibio_c"] = df_long["antibio_c"].round(2)
-            df_long["antibio_c"].replace([np.inf, -np.inf], 0, inplace=True)
-
+            dfPlots["antibio_c"].replace([np.inf, -np.inf], 0, inplace=True)
+            # remove lines with extreme values
+            dfPlots = dfPlots[(dfPlots["yld"] > 5.9) & (dfPlots["gRate"] < 1)]
+            #add one line to represent the 1E2 antibio_d
+            in2row = pd.DataFrame(
+                {
+                    "lag": None,
+                    "gRate": None,
+                    "yld": 0,
+                    "antibio_d": 1E2,
+                    "inoculum": 2,
+                    "dropId": None,
+                    "antibio_c": c_init / 1E2,
+                },
+                index=[0]
+            )
+            in1024row = pd.DataFrame(
+                {
+                    "lag": None,
+                    "gRate": None,
+                    "yld": 0,
+                    "antibio_d": 1E2,
+                    "inoculum": 1024,
+                    "dropId": None,
+                    "antibio_c": c_init / 1E2,
+                },
+                index=[0]
+            )
+            dfPlots = pd.concat([dfPlots, in2row, in1024row], ignore_index=True, sort=False)
 
             # 3. Palette de couleurs pour les inoculums
-            palette = dict(zip(
-                sorted(df_long["inoculum"].unique()),
-                sns.color_palette("tab10", n_colors=len(df_long["inoculum"].unique()))
-            ))
+            palette = dict(
+                zip(
+                    sorted(dfPlots["inoculum"].unique()),
+                    sns.color_palette(
+                        "tab10", n_colors=len(dfPlots["inoculum"].unique())
+                    ),
+                )
+            )
 
             # 4. Boxplot seaborn
             fig, ax = plt.subplots(figsize=(10, 6))
-            ax.set_ylim([-5, 25])
             sns.boxplot(
                 x="antibio_c",
                 y="lag",
                 hue="inoculum",
-                data=df_long,
+                data=dfPlots,
                 palette=palette,
                 showfliers=True,
                 ax=ax,
@@ -186,6 +229,19 @@ for rootPath in rootPathList:
             ax.set_xlabel("antibio concentration (µg/mL)")
             ax.set_ylabel("lag time (h)")
             ax.legend(title="inoculum (cell/drop)")
+            for tick, label in zip(ax.get_xticks(), ax.get_xticklabels()):
+                try:
+                    value = float(label.get_text())
+                    if value == 10:
+                        # Place un symbole au-dessus de la boîte (yMax à ajuster selon tes données)
+                        yMax = ax.get_ylim()[1]
+                        yMin = ax.get_ylim()[0]
+                        ax.text(
+                            tick, (yMax-yMin)*0.5 + yMin, "✖",  # ou "*" ou "?", selon ton choix
+                            color="red", fontsize=20, ha="center", va="bottom"
+                        )
+                except ValueError:
+                    continue
             plt.tight_layout()
             fig.savefig(
                 rootPath + "/boxplotLagAntibio_" + channel + ".pdf",
@@ -193,51 +249,41 @@ for rootPath in rootPathList:
                 bbox_inches="tight"
             )
 
-if plot_grate:
-    # ...après le plot du lag time...
-
-    # ----------- Plot gRate en fonction de antibio et inoculum -----------
-    # 1. Prépare les données au format "long" pour gRate
-    df_gRate = pd.DataFrame()
-    for col in gRate.columns:
-        inoc, antibioD = getValueInLabel(col, path)
-        temp = pd.DataFrame({
-            "gRate": gRate[col].dropna(),
-            "antibio_d": antibioD,
-            "inoculum": inoc
-        })
-        df_gRate = pd.concat([df_gRate, temp], ignore_index=True)
-
-    df_gRate["antibio_c"] = c_init / df_gRate["antibio_d"]
-    df_gRate["antibio_c"] = df_gRate["antibio_c"].round(2)
-    df_gRate["antibio_c"].replace([np.inf, -np.inf], 0, inplace=True)
-
-    # 2. Palette de couleurs pour les inoculums (même que pour lag)
-    palette_g = dict(zip(
-        sorted(df_gRate["inoculum"].unique()),
-        sns.color_palette("tab10", n_colors=len(df_gRate["inoculum"].unique()))
-    ))
-
-    # 3. Boxplot seaborn pour gRate
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(
-        x="antibio_c",
-        y="gRate",
-        hue="inoculum",
-        data=df_gRate,
-        palette=palette_g,
-        showfliers=True,
-        ax=ax,
-    )
-    ax.set_title(
-        f"gRate in function of antibiotic concentration: {rootPath.split('/')[-2]}"
-    )
-    ax.set_xlabel("antibio concentration (µg/mL)")
-    ax.set_ylabel("gRate")
-    ax.legend(title="inoculum (cell/drop)")
-    plt.tight_layout()
-    fig.savefig(
-        rootPath + "/boxplotgRateAntibio_" + channel + ".pdf",
-        format="pdf",
-        bbox_inches="tight"
-    )
+            if plot_grate:
+                # 3. Boxplot seaborn pour gRate
+                fig, ax = plt.subplots(figsize=(10, 6))
+                sns.boxplot(
+                    x="antibio_c",
+                    y="gRate",
+                    hue="inoculum",
+                    data=dfPlots,
+                    palette=palette,
+                    showfliers=True,
+                    ax=ax,
+                )
+                ax.set_title(
+                    f"gRate in function of antibiotic concentration: {rootPath.split('/')[-2]}"
+                )
+                ax.set_xlabel("antibio concentration (µg/mL)")
+                ax.set_ylabel("gRate")
+                ax.legend(title="inoculum (cell/drop)")
+                for tick, label in zip(ax.get_xticks(), ax.get_xticklabels()):
+                    try:
+                        value = float(label.get_text())
+                        if value == 10:
+                            # Place un symbole au-dessus de la boîte (yMax à ajuster selon tes données)
+                            yMax = ax.get_ylim()[1]
+                            yMin = ax.get_ylim()[0]
+                            ax.text(
+                                tick, (yMax-yMin)*0.5 + yMin, "✖",  # ou "*" ou "?", selon ton choix
+                                color="red", fontsize=20, ha="center", va="bottom"
+                            )
+                    except ValueError:
+                        continue
+                plt.tight_layout()
+                fig.savefig(
+                    rootPath + "/boxplotgRateAntibio_" + channel + ".pdf",
+                    format="pdf",
+                    bbox_inches="tight"
+                )
+# %%
