@@ -31,7 +31,7 @@ from functionsCleanPipeline import (
 )
 
 # ---------------- Entries ------------------
-rootPathList = ["/Users/inesgabert/Documents/LBE/experiences/GFP2/"]
+rootPathList = ["/Users/inesgabert/Documents/LBE/experiences/GFP2_antib_amp/"]
 source = "/Users/inesgabert/Documents/LBE/experiences/"
 channelList = ["GFP"]
 channel = "GFP"
@@ -114,7 +114,7 @@ for rootPath in rootPathList:
             if antibio:
                 antibioList = []
             [dropMap, df, labelList] = loadData(path)
-            [stdgRate, gRate, lag, stdLag, yld, stdYield, halfTime] = getDataHistogram(
+            [stdgRate, gRate, timeToDetection, stdLag, yld, stdYield, halfTime] = getDataHistogram(
                 labelList, path, channel, True
             )
             labelList = sorted(labelList)
@@ -267,7 +267,7 @@ for rootPath in rootPathList:
             [
                 stdGrowthRate,
                 growthRate,
-                lagTime,
+                timeToDetection,
                 stdLagTime,
                 yieldValue,
                 stdYield,
@@ -295,10 +295,10 @@ for rootPath in rootPathList:
                     gridYTicksMajor = np.arange(yMin, yMax, 0.1)
 
                 elif dataType == "lag":
-                    rawData = lagTime
+                    rawData = timeToDetection
                     yMin = 0
                     yMax = 23
-                    yLabel = "lag time (h)"
+                    yLabel = "time to detection (h)"
                     if "BipyCAA" in path:
                         yMin = 0
                         yMax = 35
@@ -394,6 +394,7 @@ for rootPath in rootPathList:
             sns.boxplot(
                 x="variable", y="value", hue="date", data=dfPlot, showfliers=False
             )
+            ax.set_xticks(np.arange(len(dfPlot["variable"].unique())))
             ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
         else:
             palette = {}
@@ -433,7 +434,7 @@ for rootPath in rootPathList:
                     final_labels.append(label)
                 else:
                     final_labels.append("")
-
+            ax.set_xticks(np.arange(len(final_labels)))
             ax.set_xticklabels(final_labels, rotation=45, ha="right")
             from matplotlib.patches import Patch
 
@@ -455,7 +456,8 @@ for rootPath in rootPathList:
 
         ax.set_xlabel(xLabel)
         ax.set_ylim([yMin, yMax])
-        ax.set_ylabel(yLabel)
+        if yLabel is not None:
+            ax.set_ylabel(yLabel)
         ax.set_yticks(gridYTicksMajor)
         ax.set_yticks(gridYTicksMinor, minor=True)
         ax.grid(which="both")

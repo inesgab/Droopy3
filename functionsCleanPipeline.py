@@ -194,9 +194,9 @@ def getValueInLabel(label, path):
         c = label.split("g")
         b = c[1].split("-")
         val = float(b[0])
-    if "GFP2" == p[posOfFolderInSource]:
+    if "antib" in p[posOfFolderInSource]:
         c = label.split("_")
-        b = float(c[-2]), c[-1]
+        b = float(c[-2]), float(c[-1])
         val = b
 
     else:   
@@ -431,6 +431,11 @@ def dataUpAndDown(df, j, channel, seuilDetection):
 
 
         if idxThresDetect > 0:
+            print("idxThresDetect: " + str(idxThresDetect))
+            print("yUp" + str(yUp))
+            if idxThresDetect >= len(y):
+                print("idxThresDetect is too high, setting to last value")
+                idxThresDetect = len(y) - 1
             indices = yUp <= y[idxThresDetect]
             yUp[indices] = threshArea * 2  # replacing 0s with seuilDetection
             indices = yDown <= y[idxThresDetect]
@@ -482,7 +487,9 @@ def calibrationFluo(df, dropMap, label, channel, runToConsider):
             x = []
 
             if content == dataFile:
-                [x, y, flag] = getfitData(df, j, channel, 0, 20, -1, 10, -2)
+                [x, y, flag] = getfitData(df, j, channel, 0, 20, -1, -15, -2)
+                
+                print("y:", y)
                 yy = y[:, 0]
                 #print(yy[runToConsider])
                 fluo.append(yy[runToConsider])
@@ -1632,5 +1639,4 @@ def func(p, x):
 def calcLag(h, g, c0, threshN):
     lag = h - np.log(threshN / c0) / g
     return lag
-
 
