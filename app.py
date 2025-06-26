@@ -12,6 +12,11 @@ import shutil
 import numpy as np
 import csv
 import pandas as pd
+import os
+import ast
+import glob
+import sys
+import datetime
 from os.path import join
 from os import listdir
 from natsort import natsorted
@@ -23,9 +28,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 from PyQt5.QtGui import QPixmap
-import ast
-import os, glob, sys
-import datetime
+
 
 os.chdir(
     os.path.dirname(os.path.abspath(__file__))
@@ -406,7 +409,7 @@ class TabWidget(QTabWidget, Ui_TabWidget):
 
     def displayFit(self):
         print(self.loadedFit)
-        if self.loadedFit == False:
+        if not self.loadedFit:
             for self.channel in self.parameters.index:
                 self.rootPath = self.parameters["rootPath"][self.channel]
                 folder = sorted(

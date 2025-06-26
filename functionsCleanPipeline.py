@@ -8,12 +8,10 @@ Created on Fri Sep 20 21:31:36 2019
 
 import pandas as pd
 import numpy as np
-from scipy.signal import chirp, find_peaks, peak_widths
 import os
 import shutil
-import ast
 from os import listdir
-from os.path import isfile, join, isdir
+from os.path import isfile, join
 import matplotlib.pyplot as plt
 from PIL import Image
 import traceback
@@ -987,6 +985,9 @@ def wrapFitData(df, folder, dataFile, dropMap, parameters, channel):
                 idx = np.where(np.isinf(y))
                 y = np.delete(y, idx[0], 0)
                 x = np.delete(x, idx[0], 0)
+                #calibParam = [float(calibParam[0]), float(calibParam[1])]
+                #y = (y * calibParam[0] + calibParam[1]) / np.log(10)
+
 
                 try:
                     # redefine bounds and run inference
@@ -1003,6 +1004,30 @@ def wrapFitData(df, folder, dataFile, dropMap, parameters, channel):
                     # apply on the range from start to max time
 
                     q = fitderiv(x, y, bd=b, logs=False, showstaterrors=False)
+
+                                # export results
+                    statdict = q.printstats()
+                    # with open(folder+'resultIndiv/'+dataFile+'resultIndiv_Drop'+str(j)+channel+'.csv','w') as csv_file:
+                    #     writer = csv.writer(csv_file)
+                    #     for key, value in statdict.items():
+                    #         writer.writerow([key, value])
+
+                    statdict["drop"] = j
+                    qf = (q.f * calibParam[0] + calibParam[1]) / np.log(10)
+                    # Get the time of max df from statdict
+                    time_of_max_df = statdict["time of max df"]
+                    # Interpolate qf at this time
+                    if hasattr(q, "t") and hasattr(q, "f"):
+                        # qf is already calculated above as (q.f * calibParam[0] + calibParam[1]) / np.log(10)
+                        # Interpolate qf at the time of max df
+                        conc_calib_max_df = np.interp(time_of_max_df, q.t, qf)
+                    else:
+                        conc_calib_max_df = np.nan
+                    statdict["conc calib max df"] = conc_calib_max_df
+                     
+
+                    combined_csv = pd.concat([combined_csv, pd.DataFrame(statdict, index=[0])])
+                    # print(combined_csv)
 
                     if display == True:
                         plt.ioff()
@@ -1026,19 +1051,12 @@ def wrapFitData(df, folder, dataFile, dropMap, parameters, channel):
                             content,
                             fromLag,
                             display,
+                            conc_calib_max_df,
+                            time_of_max_df
+
                         )
 
-                    # export results
-                    statdict = q.printstats()
-                    # with open(folder+'resultIndiv/'+dataFile+'resultIndiv_Drop'+str(j)+channel+'.csv','w') as csv_file:
-                    #     writer = csv.writer(csv_file)
-                    #     for key, value in statdict.items():
-                    #         writer.writerow([key, value])
-
-                    statdict["drop"] = j
-
-                    combined_csv = pd.concat([combined_csv, pd.DataFrame(statdict, index=[0])])
-                    # print(combined_csv)
+        
 
                 except Exception as inst:
                     print(folder)
@@ -1085,6 +1103,7 @@ def wrapFitData(df, folder, dataFile, dropMap, parameters, channel):
                                 "lag time std": np.nan,
                                 "lag time stderr": np.nan,
                                 "drop": j,
+                                "conc calib max df": np.nan,
                             },
                             index=[0],
                         ),
@@ -1128,6 +1147,8 @@ def plotDerivCurve(
     content,
     fromLag,
     display=False,
+    conc_calib_max_df=None,
+    time_of_max_df=None
 ):
     # x = xlist[0]
     # y = ylist[0]
@@ -1161,7 +1182,9 @@ def plotDerivCurve(
     # ax.errorbar(xPVD,yPVD,yerr=ystdPVD,fmt='+g')
     # q.plotfit('f', color = 'r')
     qf = (q.f * calibParam[0] + calibParam[1]) / np.log(10)
-    # ax.plot(q.t, qf,'-r')
+    ax.plot(q.t, qf,'-r')
+    if conc_calib_max_df is not None and time_of_max_df is not None and not np.isnan(conc_calib_max_df) and not np.isnan(time_of_max_df):
+        ax.plot(time_of_max_df, conc_calib_max_df, 'o', color='green', markersize=14, markeredgecolor='k', label='Max df point')
 
     ax.set_title(
         dataFile
@@ -1177,7 +1200,7 @@ def plotDerivCurve(
     ax.set_yticks(np.arange(ymin, ymax))
     ax.grid(color="k")
     # ax.grid(which='minor', alpha=1, linestyle='--')
-    ax.set_ylabel("log(raw fluo)")
+    ax.set_ylabel("calibration of raw fluo: logC ")
     if not np.isnan(ymin) and not np.isnan(ymax):
         ax.set_ylim(ymin, ymax)
 
@@ -1293,7 +1316,8 @@ def getDataHistogram(label, path, channel, fromLag):
     yld = pd.DataFrame()
     stdyield = pd.DataFrame()
     halfTime = pd.DataFrame()
-
+    conc_halfTime = pd.DataFrame()
+    
     with open(path + "outliersbyAlgo_" + channel + ".csv", "r") as f:
         reader = csv.reader(f)
         outlayerAlgo = np.squeeze(list(reader))
@@ -1312,8 +1336,16 @@ def getDataHistogram(label, path, channel, fromLag):
 
     outlayer.extend(outlayerAlgo)
 
+
     for n, labelName in enumerate(label):
         if fromLag:
+
+            print(folder
+            + labelName
+            + "resultIndivFitFromDetectionTime_Drop_"
+            + channel
+            + ".csv")
+            
             df = pd.read_csv(
                 folder
                 + labelName
@@ -1321,9 +1353,7 @@ def getDataHistogram(label, path, channel, fromLag):
                 + channel
                 + ".csv"
             )
-            ht = pd.read_csv(folder + labelName + "halftime" + channel + ".csv")
-            ht.columns = ["drop", labelName + "_ht"]
-            ht = ht.set_index("drop")
+      
         else:
             df = pd.read_csv(
                 folder + labelName + "resultIndiv_Drop_" + channel + ".csv"
@@ -1339,8 +1369,6 @@ def getDataHistogram(label, path, channel, fromLag):
 
         tmp = pd.DataFrame({labelName: df["max df"]})
         gRate = pd.concat([gRate, tmp], axis=1)
-        halfTime = pd.concat([halfTime, ht], axis=1)
-        halfTime = pd.concat([halfTime, tmp], axis=1)
         tmp = pd.DataFrame({labelName: df["lag time"]})
         lag = pd.concat([lag, tmp], axis=1)
         tmp = pd.DataFrame({labelName: df["max y"]})
@@ -1351,8 +1379,12 @@ def getDataHistogram(label, path, channel, fromLag):
         stdlag = pd.concat([stdlag, tmp], axis=1)
         tmp = pd.DataFrame({labelName: df["max y std"]})
         stdyield = pd.concat([stdyield, tmp], axis=1)
+        tmp = pd.DataFrame({labelName: df["time of max df"]})
+        halfTime = pd.concat([halfTime, tmp], axis=1)
+        tmp = pd.DataFrame({labelName: df["conc calib max df"]})
+        conc_halfTime = pd.concat([conc_halfTime, tmp], axis=1)
 
-    return [stdgRate, gRate, lag, stdlag, yld, stdyield, halfTime]
+    return [stdgRate, gRate, lag, stdlag, yld, stdyield, halfTime, conc_halfTime]
 
 
 def poolDataInterpolate(dropMap, df, label, channel, path, parameters, savefig):

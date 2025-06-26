@@ -19,24 +19,25 @@ from functionsCleanPipeline import loadData, calibrationFluo, findIdx, func
 # ---------------- Entries and parameters ------------------
 
 # These entries are to be modified according to the experiment and the channel used
-rootPath = "/Users/inesgabert/Documents/LBE/calibration/EXP20250611_1105/"  # absolute path to the calibration data folder
-for runToConsider in range(8):
+rootPath = "/Users/inesgabert/Documents/LBE/calibration/EXP20250620_1157/"  # absolute path to the calibration data folder
+for runToConsider in range(6):
         # run number to consider for calibration
     channel = "GFP"  # RFP, GFP, PVD
-    thresholdLogBlank = 3 # limit from which the fit starts, e.g., 3.5
+    thresholdLogBlank = 1 # limit from which the fit starts, e.g., 3.5
     tag = "GFP"  #'mSc' 'GFP'
 
     cellCount = None  # bact. concentration (bact/mL), to be calculated or replaced by a known value to skip following entries
     if cellCount is None:
-        # EXP20250611
-        colonyCounts = (
-            np.array([7, 15, 11, 9, 17, 14, 12, 14, 15, 12, 11]) * 1e6
-        )  # number of colonies in the drops * corresponding factor of dilution
+        colonyCounts = np.array([1, 6, 5, 9, 7, 6, 7, 5]) * 1e6
+          # number of colonies in the drops * corresponding factor of dilution
         dropVolume = 5e-3  # in mL
         #count = None  # bact. concentration (bact/mL), to be calculated or replaced by a known value to skip following entries
 
-        #EXP20250522 colonies = np.array([19, 16, 15, 20, 16, 15, 13, 20, 16]) * 1e6  # number of colonies in the drops * corresponding factor of dilution
-
+        #EXP20250522 colonies = np.array([19, 16, 15, 20, 16, 15, 13, 20, 16]) * 1e6
+        # EXP20250611
+        # colonyCounts = (
+        #     np.array([7, 15, 11, 9, 17, 14, 12, 14, 15, 12, 11]) * 1e6
+        # )
 
 
     # ----------------- End of entries --------------------------

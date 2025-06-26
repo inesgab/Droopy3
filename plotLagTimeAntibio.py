@@ -10,17 +10,17 @@ This script is used to box plot the lag time as a function of the inoculum size.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import ast
 import seaborn as sns
 import os
 from os import listdir
 from os.path import join
+from scipy.stats import mannwhitneyu, kruskal
+from itertools import combinations
 
 from functionsCleanPipeline import (
     loadData,
     getValueInLabel,
     getDataHistogram,
-    calib,
     poolDataInterpolate,
     checkDataInterpolated,
     getThresHalfTime,
@@ -29,7 +29,7 @@ from functionsCleanPipeline import (
 
 # ---------------- Entries ------------------
 rootPathList = [
-    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_nal_1machine_39/"
+    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_NaHCO3_1machine_39/"
 ]
 source = "/Users/inesgabert/Documents/LBE/experiences/"
 channelList = ["GFP"]
@@ -40,7 +40,6 @@ missingAntibio = [
 # =[] sinon
 cInitAntib = 1000  # µg/mL
 # --------------- End of entries ------------
-plt.close("all")
 dropVolume = 4e-4  # ml
 
 # get the halftime of the logistic growth to measure the lag
@@ -57,6 +56,7 @@ for rootPath in rootPathList:
 
     for channel in channelList:
         for path in folder:
+            print("for path in folder: path:", path)
             [dropMap, df, labelList] = loadData(path)
             parameters = pd.read_csv(path + "parametersAnalysis.csv")
             parameters = parameters.set_index("channelList")
@@ -83,6 +83,7 @@ for rootPath in rootPathList:
 
                 time = df["time"].to_list()
                 df = df.drop("time", axis=1)
+
                 indexHalf = df[df > threshold].apply(pd.Series.first_valid_index)
                 indexHalf = indexHalf.dropna()
                 timeLag = [time[int(i)] for i in indexHalf.values]
@@ -107,17 +108,18 @@ for rootPath in rootPathList:
     print("folder:", folder)
 
     for channel in channelList:
+        dfPlots = pd.DataFrame()
         for path in folder:
             lagTable = pd.DataFrame()
             inoculumList = []
             antibioDList = []
             [dropMap, df, labelList] = loadData(path)
-            [_, gRate, timeToDetection, stdLag, yld, _, halfTime] = getDataHistogram(
-                labelList, path, channel, True
-            )
+       
             labelList = sorted(labelList)
             for label in labelList:
-                h = halfTime[[label + "_ht", label]].dropna()
+          
+                [_, gRate, timeToDetection, stdLag, yld, _, halfTime, conc_halfTime] = getDataHistogram(
+                labelList, path, channel, True)
 
                 inoculum, antibioD = getValueInLabel(label, path)
                 if antibioD not in antibioDList:
@@ -126,12 +128,8 @@ for rootPath in rootPathList:
                 c0 = inoculum / dropVolume
                 if inoculum not in inoculumList:
                     inoculumList.append(inoculum)
-                thresholdN = calib(
-                    getThresHalfTime(rootPath, source, labelList),
-                    list(map(float, ast.literal_eval(parameters.calib[channel]))),
-                )
                 t = pd.DataFrame()
-                t[label] = calcLag(h[label + "_ht"], h[label], c0, thresholdN)
+                t[label] = calcLag(halfTime[label], gRate[label], c0, 10**conc_halfTime[label])
 
                 lagTable = pd.concat([lagTable, t[label]], axis=1)
 
@@ -146,35 +144,37 @@ for rootPath in rootPathList:
             )
 
             # Préparer les données
-            dfPlots = pd.DataFrame()
+
             for col in lagTable.columns:
                 inoculum, antibioD = getValueInLabel(col, path)
-                temp = pd.DataFrame(
+                common_idx = (
+                    lagTable[col]
+                    .dropna()
+                    .index.intersection(gRate[col].dropna().index)
+                    .intersection(yld[col].dropna().index)
+                )
+                tempDf = pd.DataFrame(
                     {
-                        "lag": lagTable[col].dropna(),
-                        "gRate": gRate[col].dropna(),
-                        "yld": yld[col].dropna(),
+                        "lag": lagTable[col].loc[common_idx],
+                        "gRate": gRate[col].loc[common_idx],
+                        "yld": yld[col].loc[common_idx],
                         "antibio_d": antibioD,
                         "inoculum": inoculum,
-                        "dropId": lagTable[col]
-                        .dropna()
-                        .index,  # index of the data in this col
+                        "dropId": common_idx,  # index of the data in this col
                     }
                 )
-                dfPlots = pd.concat([dfPlots, temp], ignore_index=True)
+                dfPlots = pd.concat([dfPlots, tempDf], ignore_index=True)
 
             # remove lines with extreme values
             absYldMin = 5.9
             relYldMax = dfPlots["yld"].max()
-            minYield = min(absYldMin, relYldMax * 0.90)
-            dfPlots = dfPlots[
-                (dfPlots["yld"] > minYield)
-                & (dfPlots["gRate"] < 1)
+            minYield = min(absYldMin, relYldMax * 0.80)
+            dfPlots = dfPlots[ (dfPlots["gRate"] < 1)
                 & (dfPlots["lag"] > 0)
             ]
             if missingAntibio != []:
                 for antibio_d in missingAntibio:
-                    # on ajoute une fausse ligne pour plot l'absence de données pour une concentration donnée
+                    # add missing antibio_d
                     newRow = pd.DataFrame(
                         {
                             "lag": None,
@@ -191,7 +191,7 @@ for rootPath in rootPathList:
                     )
         dfPlots["antibio_c"] = cInitAntib / dfPlots["antibio_d"]
         dfPlots["antibio_c"].replace([np.inf, -np.inf], 0, inplace=True)
-        # 3. Palette de couleurs pour les inoculums
+        # inoculum palette
         palette = dict(
             zip(
                 sorted(dfPlots["inoculum"].unique()),
@@ -205,7 +205,7 @@ for rootPath in rootPathList:
             )
         )
 
-        # Boxplot seaborn pour lagtime
+        # seaborn boxplot for lag time
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.boxplot(
             x="antibio_c",
@@ -223,16 +223,15 @@ for rootPath in rootPathList:
         ax.set_xlabel("antibio concentration (µg/mL)")
         ax.set_ylabel("lag time (h)")
         ax.legend(title="inoculum (cell/drop)")
+        ax.set_ylim([5, 17])
 
-        # Pour chaque valeur, vérifie s'il y a des données, et met une croix si pas de valeurs
         for tick, label in zip(ax.get_xticks(), ax.get_xticklabels()):
             try:
                 value = float(label.get_text())
             except ValueError:
                 continue
-            # Vérifie s'il y a des données pour cette concentration
             if dfPlots[dfPlots["antibio_c"] == value].dropna().empty:
-                # Pas de données : ajoute un symbole
+                # No data: add a cross symbol
                 yMax = ax.get_ylim()[1]
                 yMin = ax.get_ylim()[0]
                 ax.text(
@@ -244,13 +243,44 @@ for rootPath in rootPathList:
                     ha="center",
                     va="bottom",
                 )
+
+        grouped = (
+            dfPlots.groupby(["antibio_c", "inoculum"])["lag"].count().reset_index()
+        )
+        xticks = ax.get_xticks()
+        xticklabels = [float(lbl.get_text()) for lbl in ax.get_xticklabels()]
+        hue_levels = sorted(dfPlots["inoculum"].unique())
+        n_hue = len(hue_levels)
+        width = 0.8 / n_hue  # largeur de chaque box
+
+        for i, x_tick in enumerate(xticks):
+            for j, hue in enumerate(hue_levels):
+                x = x_tick - 0.4 + width / 2 + j * width
+                count = grouped[
+                    (grouped["antibio_c"] == xticklabels[i])
+                    & (grouped["inoculum"] == hue)
+                ]["lag"]
+                if not count.empty:
+                    # max of lag for this group: position of the text
+                    y_max = dfPlots[
+                        (dfPlots["antibio_c"] == xticklabels[i])
+                        & (dfPlots["inoculum"] == hue)
+                    ]["lag"].max()
+                    ax.text(
+                        x,
+                        y_max + 0.1,
+                        f"n={int(count.values[0])}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=8,
+                        color="black",
+                    )
         plt.tight_layout()
         fig.savefig(
             rootPath + "/boxplotLagAntibio_" + channel + ".pdf",
             format="pdf",
             bbox_inches="tight",
         )
-
         # Boxplot seaborn pour gRate
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.boxplot(
@@ -268,13 +298,13 @@ for rootPath in rootPathList:
         ax.set_xlabel("antibio concentration (µg/mL)")
         ax.set_ylabel("gRate")
         ax.legend(title="inoculum (cell/drop)")
-        # met une croix si pas de valeurs
+        # cross for missing data
         for tick, label in zip(ax.get_xticks(), ax.get_xticklabels()):
             try:
                 value = float(label.get_text())
             except ValueError:
                 continue
-            # Vérifie s'il y a des données pour cette concentration
+            # checks if there are data for this concentration
             if dfPlots[dfPlots["antibio_c"] == value].dropna().empty:
                 # Pas de données : ajoute un symbole
                 yMax = ax.get_ylim()[1]
@@ -288,6 +318,39 @@ for rootPath in rootPathList:
                     ha="center",
                     va="bottom",
                 )
+        # number of samples for each group
+        grouped = (
+            dfPlots.groupby(["antibio_c", "inoculum"])["gRate"].count().reset_index()
+        )
+
+        # Gets the positions of the ticks (one per box)
+        xticks = ax.get_xticks()
+        xticklabels = [float(lbl.get_text()) for lbl in ax.get_xticklabels()]
+        hue_levels = sorted(dfPlots["inoculum"].unique())
+        n_hue = len(hue_levels)
+        width = 0.8 / n_hue  # width of each box
+
+        for i, x_tick in enumerate(xticks):
+            for j, hue in enumerate(hue_levels):
+                x = x_tick - 0.4 + width / 2 + j * width
+                count = grouped[
+                    (grouped["antibio_c"] == xticklabels[i])
+                    & (grouped["inoculum"] == hue)
+                ]["gRate"]
+                if not count.empty:
+                    y_max = dfPlots[
+                        (dfPlots["antibio_c"] == xticklabels[i])
+                        & (dfPlots["inoculum"] == hue)
+                    ]["gRate"].max()
+                    ax.text(
+                        x,
+                        y_max + 0.01,
+                        f"n={int(count.values[0])}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=8,
+                        color="black",
+                    )
         plt.tight_layout()
         fig.savefig(
             rootPath + "/boxplotgRateAntibio_" + channel + ".pdf",
@@ -295,8 +358,109 @@ for rootPath in rootPathList:
             bbox_inches="tight",
         )
 # %%
-# Extraction des deux Series pour inoculum = 1024 et inoculum = 2
-series_1024 = dfPlots[dfPlots["inoculum"] == 1024]
-series_2 = dfPlots[dfPlots["inoculum"] == 2]
+# tests statistiques
 
+# Liste pour stocker les résultats
+mannWhitney = []
+print("-------------- Mann Whitney test on inoculum results ----------------")
+
+for antibio_c in sorted(dfPlots["antibio_c"].unique()):
+    inoculums = sorted(dfPlots["inoculum"].unique())
+    for inoc1, inoc2 in combinations(inoculums, 2):
+        # --- Lag time ---
+        group1 = dfPlots[
+            (dfPlots["antibio_c"] == antibio_c) & (dfPlots["inoculum"] == inoc1)
+        ]["lag"].dropna()
+        group2 = dfPlots[
+            (dfPlots["antibio_c"] == antibio_c) & (dfPlots["inoculum"] == inoc2)
+        ]["lag"].dropna()
+        if len(group1) > 0 and len(group2) > 0:
+            stat, p = mannwhitneyu(group1, group2, alternative="two-sided")
+            mannWhitney.append(
+                {
+                    "measure": "lag",
+                    "inoculum_1": inoc1,
+                    "inoculum_2": inoc2,
+                    "antibio_c": antibio_c,
+                    "p_value": p,
+                }
+            )
+            if p < 0.05:
+                print(
+                    f"[Lag] Distributions different for inoculum {inoc1} vs {inoc2} at antibio_c={antibio_c:.2f} µg/mL (p={p:.3g})"
+                )
+        # --- gRate ---
+        group1 = dfPlots[
+            (dfPlots["antibio_c"] == antibio_c) & (dfPlots["inoculum"] == inoc1)
+        ]["gRate"].dropna()
+        group2 = dfPlots[
+            (dfPlots["antibio_c"] == antibio_c) & (dfPlots["inoculum"] == inoc2)
+        ]["gRate"].dropna()
+        if len(group1) > 0 and len(group2) > 0:
+            stat, p = mannwhitneyu(group1, group2, alternative="two-sided")
+            mannWhitney.append(
+                {
+                    "measure": "gRate",
+                    "inoculum_1": inoc1,
+                    "inoculum_2": inoc2,
+                    "antibio_c": antibio_c,
+                    "p_value": p,
+                }
+            )
+            if p < 0.05:
+                print(
+                    f"[gRate] Distributions different for inoculum {inoc1} vs {inoc2} at antibio_c={antibio_c:.2f} µg/mL (p={p:.3g})"
+                )
+
+
+# Convertir en DataFrame
+mannWhitneyDf = pd.DataFrame(mannWhitney)
+
+# Afficher ou sauvegarder
+print(mannWhitneyDf)
+
+kruskalResults = []
+print(
+    "\n \n-------------- Kruskal-Willis test on all antibioC for each inoculum --------------"
+)
+for inoc in [2, 1024]:
+    # --- lag ---
+    groups = [
+        dfPlots[(dfPlots["inoculum"] == inoc) & (dfPlots["antibio_c"] == ab)][
+            "lag"
+        ].dropna()
+        for ab in sorted(dfPlots["antibio_c"].unique())
+    ]
+    # Garde seulement les groupes non vides
+    groups = [g for g in groups if len(g) > 0]
+    if len(groups) > 1:
+        stat, p = kruskal(*groups)
+        kruskalResults.append({"measure": "lag", "inoculum": inoc, "p_value": p})
+        if p < 0.05:
+            print(
+                f"[lag] Kruskal-Wallis: distributions differ between antibio groups for inoculum {inoc} (p={p:.3g})"
+            )
+
+    # --- gRate ---
+    groups = [
+        dfPlots[(dfPlots["inoculum"] == inoc) & (dfPlots["antibio_c"] == ab)][
+            "gRate"
+        ].dropna()
+        for ab in sorted(dfPlots["antibio_c"].unique())
+    ]
+    groups = [g for g in groups if len(g) > 0]
+    if len(groups) > 1:
+        stat, p = kruskal(*groups)
+        kruskalResults.append({"measure": "gRate", "inoculum": inoc, "p_value": p})
+    if p < 0.05:
+        print(
+            f"[gRate] Kruskal-Wallis: distributions differ between antibio groups for inoculum {inoc} (p={p:.3g})"
+        )
+
+kruskalDf = pd.DataFrame(kruskalResults)
+print(kruskalDf)
+# kruskal_df.to_csv("kruskal_results.csv", index=False)
+
+# test de Kruskal-Wallis pour comparer les groupes
+# mannWhitney.to_csv("mannwhitney_mannWhitney.csv", index=False)
 # %%
