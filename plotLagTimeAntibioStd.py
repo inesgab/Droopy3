@@ -30,9 +30,7 @@ from functionsCleanPipeline import (
 
 # ---------------- Entries ------------------
 rootPathList = [
-    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_nal_1machine_39",
-    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_nal_1machine_39_2",
-    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_nal_2machine_35"
+    "/Users/inesgabert/Documents/LBE/experiences/GFPmut3b_antib_amp_1machine_39_2"
 ]
 source = "/Users/inesgabert/Documents/LBE/experiences/"
 channelList = ["GFP"]
@@ -42,15 +40,17 @@ missingAntibio = [
 ]  # à remplir si des concentrations d'antibiotiques sont manquantes dans les plots
 # =[] sinon
 cInitAntib = 1000  # µg/mL
-inoculum_symbols = {2: "^", 1024: "s"}
+inoculum_symbols = {2: "^", 1024: "o"}
 # --------------- End of entries ------------
 
 dropVolume = 4e-4  # ml
 allPlots = []
-paletteLag = dict(zip(rootPathList,
-        sns.color_palette("Blues", n_colors=len(rootPathList) ) ) )
-paletteGRate = dict(zip(rootPathList,
-        sns.color_palette("Greens", n_colors=len(rootPathList) ) ) )# get the halftime of the logistic growth to measure the lag
+paletteLag = dict(
+    zip(rootPathList, sns.color_palette("Blues", n_colors=len(rootPathList)))
+)
+paletteGRate = dict(
+    zip(rootPathList, sns.color_palette("Greens", n_colors=len(rootPathList)))
+)  # get the halftime of the logistic growth to measure the lag
 
 parameterPalettes = {
     "lag": paletteLag,
@@ -60,6 +60,11 @@ parameterPalettes = {
 parameterYLims = {
     "lag": (0, 15),
     "gRate": (0.1, 1.1),
+}
+
+parameterTitles = {
+    "lag": "Lag time (h)",
+    "gRate": "Growth rate (au)",
 }
 
 
@@ -134,12 +139,12 @@ for rootPath in rootPathList:
             inoculumList = []
             antibioDList = []
             [dropMap, df, labelList] = loadData(path)
-       
+
             labelList = sorted(labelList)
             for label in labelList:
-          
-                [_, gRate, timeToDetection, stdLag, yld, _, halfTime, conc_halfTime] = getDataHistogram(
-                labelList, path, channel, True)
+                [_, gRate, timeToDetection, stdLag, yld, _, halfTime, conc_halfTime] = (
+                    getDataHistogram(labelList, path, channel, True)
+                )
 
                 inoculum, antibioD = getValueInLabel(label, path)
                 if antibioD not in antibioDList:
@@ -149,7 +154,9 @@ for rootPath in rootPathList:
                 if inoculum not in inoculumList:
                     inoculumList.append(inoculum)
                 t = pd.DataFrame()
-                t[label] = calcLag(halfTime[label], gRate[label], c0, 10**conc_halfTime[label])
+                t[label] = calcLag(
+                    halfTime[label], gRate[label], c0, 10 ** conc_halfTime[label]
+                )
 
                 lagTable = pd.concat([lagTable, t[label]], axis=1)
 
@@ -185,13 +192,11 @@ for rootPath in rootPathList:
                 )
                 dfPlots = pd.concat([dfPlots, tempDf], ignore_index=True)
 
-            # remove lines with extreme values
+            #remove lines with extreme values
             absYldMin = 5.9
             relYldMax = dfPlots["yld"].max()
             minYield = min(absYldMin, relYldMax * 0.80)
-            dfPlots = dfPlots[ (dfPlots["gRate"] < 1)
-                & (dfPlots["lag"] > 0)
-            ]
+            dfPlots = dfPlots[(dfPlots["gRate"] < 1) & (dfPlots["lag"] > 0)]
             if missingAntibio != []:
                 for antibio_d in missingAntibio:
                     # add missing antibio_d
@@ -235,7 +240,7 @@ for parameter, palette in parameterPalettes.items():
     print(ax.get_xlim())
     ax.set_xticks(range(n_antibio))
     totalWidth = ax.get_xlim()[1] - ax.get_xlim()[0]
-    width = totalWidth / (n_inoc*n_antibio)/2
+    width = totalWidth / (n_inoc * n_antibio) / 2
 
     for i, antibio_c in enumerate(antibio_c_list):
         for j, rootPath in enumerate(rootPathList):
@@ -251,7 +256,7 @@ for parameter, palette in parameterPalettes.items():
                     std = row["std"].values[0]
                     color = palette[rootPath]
                     # Position de la barre
-                    x = i + (n_inoc + k) * width -0.5 - width/2
+                    x = i + (n_inoc + k) * width - 0.5 - width / 2
                     # Barre d'erreur
                     ax.errorbar(
                         x,
@@ -261,7 +266,7 @@ for parameter, palette in parameterPalettes.items():
                         color=color,
                         markerfacecolor="white",
                         markeredgewidth=2,
-                        markersize=12,
+                        markersize=8,
                         ecolor=color,
                         capsize=5,
                         linewidth=2,
@@ -272,9 +277,11 @@ for parameter, palette in parameterPalettes.items():
     ax.set_xticks(range(len(antibio_c_list)))
     ax.set_xticklabels([str(a) for a in antibio_c_list])
     ax.set_xlabel("antibio concentration (µg/mL)")
-    ax.set_ylabel("lag time (h)")
+    ax.set_ylabel(parameterTitles[parameter])
     ax.set_ylim(parameterYLims[parameter])
-    ax.set_title("Lag time by antibio, rootPath (color), inoculum (symbol)")
+    ax.set_title(
+        parameterTitles[parameter] + " by antibio, rootPath (color), inoculum (symbol)"
+    )
     for tick, label in zip(ax.get_xticks(), ax.get_xticklabels()):
         try:
             value = float(label.get_text())
@@ -295,18 +302,26 @@ for parameter, palette in parameterPalettes.items():
             )
     # Légendes personnalisées
     from matplotlib.lines import Line2D
+
     color_legend = [
         Line2D([0], [0], color=color, lw=8, label=path.split("/")[-1])
         for path, color in palette.items()
     ]
     symbol_legend = [
-        Line2D([0], [0], marker=marker, color="black", lw=0, markersize=12, markerfacecolor="white", markeredgewidth=2, label=f"{inoc} Inoculum")
+        Line2D(
+            [0],
+            [0],
+            marker=marker,
+            color="black",
+            lw=0,
+            markersize=12,
+            markerfacecolor="white",
+            markeredgewidth=2,
+            label=f"{inoc} Inoculum",
+        )
         for inoc, marker in inoculum_symbols.items()
     ]
     ax.legend(handles=color_legend + symbol_legend, loc="best", fontsize=10)
-
-
-
 
 
 # %%
